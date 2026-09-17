@@ -1,0 +1,17 @@
+listen: 0.0.0.0
+port: 8080
+interval_seconds: 5
+timeout_seconds: 1
+fail_threshold: 3          # consecutive misses before Down
+recover_threshold: 2       # consecutive hits before Up
+history_hours: 24
+alert_sound: true
+degraded_ms: 200           # 0 disables the amber "degraded" state
+
+hosts:
+  - name: This host
+    ip: 127.0.0.1
+  - name: Gateway
+    ip: 192.168.1.1
+  - name: NAS
+    ip: 192.168.1.10

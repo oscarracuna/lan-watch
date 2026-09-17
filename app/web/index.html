@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LAN Watch</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div>
+        <h1>LAN Watch</h1>
+        <p class="tagline">Live ICMP status on this network</p>
+      </div>
+      <span id="live" class="pill">Connecting</span>
+    </div>
+    <div id="summary" class="summary"></div>
+    <div class="controls">
+      <span id="sweep" class="sweep">Last sweep: —</span>
+      <button id="btn-mute" type="button">Sound on</button>
+      <button id="btn-notify" type="button">Enable notifications</button>
+    </div>
+  </header>
+
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+  <main id="grid" class="grid"></main>
+
+  <div id="backdrop" class="backdrop" hidden></div>
+  <aside id="drawer" class="drawer" hidden>
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawer-name">Host</h2>
+        <p id="drawer-ip" class="mono"></p>
+      </div>
+      <button id="drawer-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="drawer-stats" class="drawer-stats"></div>
+    <div id="spark" class="spark"></div>
+    <p id="drawer-hint" class="hint"></p>
+  </aside>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

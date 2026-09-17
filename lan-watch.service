@@ -1,0 +1,17 @@
+[Unit]
+Description=LAN Watch ping dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lan-watch
+ExecStart=/opt/lan-watch/.venv/bin/python -m app
+Restart=always
+RestartSec=3
+# Uncomment and set if you create a dedicated user:
+# User=lanwatch
+# Group=lanwatch
+
+[Install]
+WantedBy=multi-user.target
