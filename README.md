@@ -54,12 +54,17 @@ The unit restarts on crash and starts at boot. Bind address and port come from `
 | `recover_threshold` | Consecutive hits before **Up** |
 | `history_hours` | How long samples are kept |
 | `alert_sound` | Allow the dashboard beep (users can still mute in the page) |
-| `degraded_ms` | Amber state when up but RTT is at or above this; `0` disables it |
+| `degraded_ms` | Amber state when up but median RTT is at or above this; `0` disables it |
+| `degraded_loss_pct` | Amber state when packet loss is at or above this; `0` disables it |
+| `packets` | ICMP echoes per host per sweep (used for loss % and min/median/max RTT) |
+| `heartbeat_ticks` | How many recent sweeps to show as ticks on each card |
 | `hosts` | List of `{name, ip}` |
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 
-History lives in `data/lan-watch.db` and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
+The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Cards sort down-first and can be filtered by name or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
+
+Each sweep sends `packets` pings (default 5). A sweep counts as up if at least one reply arrives; loss % and RTT spread are shown on the card. History lives in `data/lan-watch.db` and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
 
 ## Notes
 

@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from app.config import Settings, config_mtime, load_config
@@ -14,6 +14,15 @@ from app.store import Store
 
 RTT_RE = re.compile(r"time[=<]\s*([\d.]+)\s*ms", re.IGNORECASE)
 PING_CONCURRENCY = 32
+PERSIST_SKIP = {
+    "uptime_pct",
+    "heartbeat",
+    "loss_pct",
+    "rtt_min_ms",
+    "rtt_max_ms",
+    "packets_ok",
+    "packets",
+}
 
 
 @dataclass
@@ -30,14 +39,18 @@ class HostState:
     last_change_ts: float | None = None
     last_sample_ts: float | None = None
     uptime_pct: float | None = None
+    loss_pct: float | None = None
+    rtt_min_ms: float | None = None
+    rtt_max_ms: float | None = None
+    packets_ok: int | None = None
+    packets: int | None = None
+    heartbeat: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     def persist_dict(self) -> dict[str, Any]:
-        data = self.as_dict()
-        data.pop("uptime_pct", None)
-        return data
+        return {key: value for key, value in self.as_dict().items() if key not in PERSIST_SKIP}
 
 
 class Hub:
@@ -97,6 +110,24 @@ def ping_once_sync(ip: str, timeout: float) -> tuple[bool, float | None]:
     return False, None
 
 
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _tick_from_result(ok: bool, loss_pct: float) -> str:
+    if not ok:
+        return "fail"
+    if loss_pct > 0:
+        return "loss"
+    return "ok"
+
+
 class PingEngine:
     def __init__(self, settings: Settings, store: Store, hub: Hub) -> None:
         self.settings = settings
@@ -117,7 +148,12 @@ class PingEngine:
             "hosts": [state.as_dict() for state in self._sorted_states()],
             "last_sweep_ts": self.last_sweep_ts,
             "config": self.settings.public_dict(),
+            "incidents": self._incidents(),
         }
+
+    def _incidents(self) -> list[dict[str, Any]]:
+        since = time.time() - self.settings.history_hours * 3600
+        return self.store.incidents(since)
 
     def _sorted_states(self) -> list[HostState]:
         order = {host.ip: index for index, host in enumerate(self.settings.hosts)}
@@ -129,13 +165,15 @@ class PingEngine:
         for key in list(self.states):
             if key not in wanted:
                 del self.states[key]
+        ticks = settings.heartbeat_ticks
         for ip, host in wanted.items():
             if ip in self.states:
                 self.states[ip].name = host.name
+                self.states[ip].heartbeat = self.states[ip].heartbeat[-ticks:]
                 continue
             row = saved.get(ip)
             if row:
-                self.states[ip] = HostState(
+                state = HostState(
                     host_key=ip,
                     name=host.name,
                     ip=ip,
@@ -147,7 +185,13 @@ class PingEngine:
                     last_fail_ts=row.get("last_fail_ts"),
                     last_change_ts=row.get("last_change_ts"),
                     last_sample_ts=row.get("last_sample_ts"),
+                    heartbeat=self.store.recent_ticks(ip, ticks),
                 )
+                self.states[ip] = state
+                if state.status == "down":
+                    self.store.open_incident(
+                        ip, host.name, ip, float(state.last_change_ts or time.time())
+                    )
             else:
                 self.states[ip] = HostState(host_key=ip, name=host.name, ip=ip)
 
@@ -182,9 +226,26 @@ class PingEngine:
         for key, state in self.states.items():
             state.uptime_pct = uptimes.get(key)
 
-    def _apply_sample(self, state: HostState, ok: bool, rtt_ms: float | None, ts: float) -> dict[str, Any] | None:
+    def _apply_sample(
+        self,
+        state: HostState,
+        ok: bool,
+        rtt_ms: float | None,
+        ts: float,
+        *,
+        loss_pct: float,
+        rtt_min_ms: float | None,
+        rtt_max_ms: float | None,
+        packets_ok: int,
+        packets: int,
+    ) -> dict[str, Any] | None:
         previous = state.status
         state.last_sample_ts = ts
+        state.loss_pct = loss_pct
+        state.rtt_min_ms = rtt_min_ms
+        state.rtt_max_ms = rtt_max_ms
+        state.packets_ok = packets_ok
+        state.packets = packets
         if ok:
             state.consecutive_ok += 1
             state.consecutive_fail = 0
@@ -201,7 +262,20 @@ class PingEngine:
                 state.status = "down"
                 state.last_change_ts = ts
 
-        self.store.add_sample(state.host_key, ts, ok, rtt_ms)
+        state.heartbeat.append(_tick_from_result(ok, loss_pct))
+        state.heartbeat = state.heartbeat[-self.settings.heartbeat_ticks :]
+
+        self.store.add_sample(
+            state.host_key,
+            ts,
+            ok,
+            rtt_ms,
+            loss_pct=loss_pct,
+            rtt_min_ms=rtt_min_ms,
+            rtt_max_ms=rtt_max_ms,
+            packets_ok=packets_ok,
+            packets=packets,
+        )
         self.store.upsert_state(state.persist_dict())
 
         if (
@@ -209,6 +283,10 @@ class PingEngine:
             and previous in {"up", "down"}
             and state.status in {"up", "down"}
         ):
+            if state.status == "down":
+                self.store.open_incident(state.host_key, state.name, state.ip, ts)
+            else:
+                self.store.close_incident(state.host_key, ts)
             return {
                 "host_key": state.host_key,
                 "name": state.name,
@@ -217,19 +295,40 @@ class PingEngine:
                 "previous": previous,
                 "ts": ts,
                 "rtt_ms": state.last_rtt_ms,
+                "loss_pct": loss_pct,
             }
         return None
 
     async def _ping_host(self, state: HostState, semaphore: asyncio.Semaphore) -> None:
-        async with semaphore:
-            ok, rtt_ms = await asyncio.to_thread(
-                ping_once_sync, state.ip, self.settings.timeout_seconds
-            )
+        packets = self.settings.packets
+        results: list[tuple[bool, float | None]] = []
+        for _ in range(packets):
+            async with semaphore:
+                results.append(
+                    await asyncio.to_thread(
+                        ping_once_sync, state.ip, self.settings.timeout_seconds
+                    )
+                )
+        rtts = [rtt for ok, rtt in results if ok and rtt is not None]
+        packets_ok = sum(1 for ok, _ in results if ok)
+        loss_pct = 100.0 * (packets - packets_ok) / packets if packets else 100.0
+        sweep_ok = packets_ok > 0
         ts = time.time()
-        alert = self._apply_sample(state, ok, rtt_ms, ts)
+        alert = self._apply_sample(
+            state,
+            sweep_ok,
+            _median(rtts),
+            ts,
+            loss_pct=loss_pct,
+            rtt_min_ms=min(rtts) if rtts else None,
+            rtt_max_ms=max(rtts) if rtts else None,
+            packets_ok=packets_ok,
+            packets=packets,
+        )
         self.hub.publish("update", state.as_dict())
         if alert:
             self.hub.publish("alert", alert)
+            self.hub.publish("incidents", self._incidents())
 
     async def run(self) -> None:
         while not self._stop.is_set():
@@ -254,6 +353,7 @@ class PingEngine:
                     "last_sweep_ts": self.last_sweep_ts,
                     "hosts": [state.as_dict() for state in self._sorted_states()],
                     "config": self.settings.public_dict(),
+                    "incidents": self._incidents(),
                 },
             )
             elapsed = time.monotonic() - cycle_start

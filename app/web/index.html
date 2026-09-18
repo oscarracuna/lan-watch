@@ -4,11 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LAN Watch</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="top">
     <div class="brand">
+      <img class="logo" src="/static/favicon.svg" alt="">
       <div>
         <h1>LAN Watch</h1>
         <p class="tagline">Live ICMP status on this network</p>
@@ -17,6 +21,10 @@
     </div>
     <div id="summary" class="summary"></div>
     <div class="controls">
+      <label class="search-wrap">
+        <span class="sr-only">Filter hosts</span>
+        <input id="search" type="search" placeholder="Filter hosts…" autocomplete="off">
+      </label>
       <span id="sweep" class="sweep">Last sweep: —</span>
       <button id="btn-mute" type="button">Sound on</button>
       <button id="btn-notify" type="button">Enable notifications</button>
@@ -24,6 +32,15 @@
   </header>
 
   <div id="toasts" class="toasts" aria-live="assertive"></div>
+
+  <section class="incidents" aria-label="Incidents">
+    <div class="incidents-head">
+      <h2>Incidents</h2>
+      <span id="incident-count" class="hint"></span>
+    </div>
+    <div id="incidents" class="incident-list"></div>
+  </section>
+
   <main id="grid" class="grid"></main>
 
   <div id="backdrop" class="backdrop" hidden></div>

@@ -8,6 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
+HEARTBEAT_TICKS = 48
 
 
 @dataclass
@@ -27,6 +28,9 @@ class Settings:
     history_hours: float = 24.0
     alert_sound: bool = True
     degraded_ms: float = 200.0
+    degraded_loss_pct: float = 40.0
+    packets: int = 5
+    heartbeat_ticks: int = HEARTBEAT_TICKS
     hosts: list[Host] = field(default_factory=list)
 
     def public_dict(self) -> dict[str, Any]:
@@ -38,6 +42,9 @@ class Settings:
             "history_hours": self.history_hours,
             "alert_sound": self.alert_sound,
             "degraded_ms": self.degraded_ms,
+            "degraded_loss_pct": self.degraded_loss_pct,
+            "packets": self.packets,
+            "heartbeat_ticks": self.heartbeat_ticks,
         }
 
 
@@ -90,6 +97,9 @@ def load_config(path: Path | None = None) -> Settings:
         history_hours=max(1.0, _as_float(raw.get("history_hours"), 24.0)),
         alert_sound=bool(raw.get("alert_sound", True)),
         degraded_ms=max(0.0, _as_float(raw.get("degraded_ms"), 200.0)),
+        degraded_loss_pct=max(0.0, _as_float(raw.get("degraded_loss_pct"), 40.0)),
+        packets=max(1, min(20, _as_int(raw.get("packets"), 5))),
+        heartbeat_ticks=max(8, min(120, _as_int(raw.get("heartbeat_ticks"), HEARTBEAT_TICKS))),
         hosts=hosts,
     )
 

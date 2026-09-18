@@ -50,9 +50,24 @@ async def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
 
 
+@app.get("/favicon.ico")
+async def favicon() -> FileResponse:
+    png = WEB_DIR / "favicon.png"
+    if png.exists():
+        return FileResponse(png)
+    return FileResponse(WEB_DIR / "favicon.svg")
+
+
 @app.get("/api/status")
 async def status() -> dict[str, Any]:
     return app.state.engine.snapshot()
+
+
+@app.get("/api/incidents")
+async def incidents() -> dict[str, Any]:
+    engine: PingEngine = app.state.engine
+    since = time.time() - engine.settings.history_hours * 3600
+    return {"incidents": app.state.store.incidents(since)}
 
 
 @app.get("/api/history/{host_key}")
