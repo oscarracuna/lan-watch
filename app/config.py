@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -7,8 +8,27 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = ROOT / "config.yaml"
 HEARTBEAT_TICKS = 48
+
+
+def _env_path(name: str) -> Path | None:
+    value = (os.environ.get(name) or "").strip()
+    return Path(value) if value else None
+
+
+def config_file() -> Path:
+    return _env_path("LANWATCH_CONFIG") or (ROOT / "config.yaml")
+
+
+def data_dir() -> Path:
+    return _env_path("LANWATCH_DATA") or (ROOT / "data")
+
+
+def secrets_file() -> Path:
+    return _env_path("LANWATCH_SECRETS") or (ROOT / "secrets" / "telegram.env")
+
+
+CONFIG_PATH = ROOT / "config.yaml"
 
 
 @dataclass
@@ -73,7 +93,7 @@ def _as_int(value: Any, default: int) -> int:
 
 
 def load_config(path: Path | None = None) -> Settings:
-    config_path = path or CONFIG_PATH
+    config_path = path or config_file()
     raw: dict[str, Any] = {}
     if config_path.exists():
         loaded = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
@@ -114,7 +134,7 @@ def load_config(path: Path | None = None) -> Settings:
 
 
 def config_mtime(path: Path | None = None) -> float:
-    config_path = path or CONFIG_PATH
+    config_path = path or config_file()
     try:
         return config_path.stat().st_mtime
     except OSError:

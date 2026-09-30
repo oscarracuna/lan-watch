@@ -6,14 +6,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.config import ROOT
-
-DB_PATH = ROOT / "data" / "lan-watch.db"
+from app.config import data_dir
 
 
 class Store:
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path or DB_PATH
+        self.path = path or (data_dir() / "lan-watch.db")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self.conn = sqlite3.connect(self.path, check_same_thread=False)

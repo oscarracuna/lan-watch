@@ -7,20 +7,15 @@ import os
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Any
 
-from app.config import ROOT, Settings
+from app.config import Settings, secrets_file
 
 log = logging.getLogger("uvicorn.error")
-SECRETS_PATH = ROOT / "secrets" / "telegram.env"
 
 
 def load_secrets() -> None:
-    path = SECRETS_PATH
-    extra = os.environ.get("LANWATCH_SECRETS")
-    if extra:
-        path = Path(extra)
+    path = secrets_file()
     if not path.is_file():
         return
     try:
@@ -56,7 +51,7 @@ class TelegramNotifier:
             log.warning(
                 "Telegram alerts are enabled but TELEGRAM_BOT_TOKEN or "
                 "TELEGRAM_CHAT_ID is empty. Edit %s (mode 600) and restart.",
-                SECRETS_PATH,
+                secrets_file(),
             )
             self._warned_missing = True
         return False

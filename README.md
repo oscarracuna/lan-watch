@@ -23,26 +23,30 @@ Listen address and port changes in `config.yaml` need a restart.
 
 ## Dedicated Linux host (systemd)
 
-Install Python 3.10+, `ping` (`iputils-ping` on Debian/Ubuntu), then copy the project to `/opt/lan-watch`:
+Run the dashboard as the `lanwatch` system user (`nologin`). That account owns the process, the SQLite file, and the Telegram env file. You still SSH and `sudo` as yourself; `lanwatch` is not a login.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3 python3-venv python3-pip iputils-ping
-sudo mkdir -p /opt/lan-watch
-sudo cp -r app config.yaml requirements.txt /opt/lan-watch/
-cd /opt/lan-watch
-sudo python3 -m venv .venv
-sudo .venv/bin/pip install -r requirements.txt
-sudo cp lan-watch.service /etc/systemd/system/lan-watch.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now lan-watch
+sudo apt-get install -y python3 python3-venv python3-pip iputils-ping rsync curl git
+sudo useradd --system --home /home/lanwatch --shell /usr/sbin/nologin lanwatch  # skip if it already exists
+sudo -u lanwatch ping -c 1 127.0.0.1   # unprivileged ping must work
+
+git clone https://github.com/oscarracuna/lan-watch.git
+cd lan-watch
+sudo ./scripts/deploy.sh
 ```
 
-Dashboard: `http://<host-ip>:8080/`
+Later updates are the same: `git pull` in that checkout, then `sudo ./scripts/deploy.sh`. The script copies code to `/opt/lan-watch`, installs the unit, restarts, and curls `/api/status`. It does **not** replace:
 
-Logs: `journalctl -u lan-watch -f`
+| Path | Role |
+|---|---|
+| `/etc/lan-watch/config.yaml` | Host list and tuning (`LANWATCH_CONFIG`) |
+| `/etc/lan-watch/telegram.env` | Bot token and chat id, mode 600 (`EnvironmentFile`) |
+| `/var/lib/lan-watch/` | SQLite history (`LANWATCH_DATA`) |
 
-The unit restarts on crash and starts at boot. Bind address and port come from `config.yaml` (`listen` / `port`).
+First run moves an existing `/opt/lan-watch/config.yaml` and `data/lan-watch.db` into those locations if they are not there yet. Dashboard: `http://<host-ip>:8080/`. Logs: `journalctl -u lan-watch -f`.
+
+The unit restarts on crash and starts at boot. Bind address and port still come from config (`listen` / `port`). Port 8080 does not need root.
 
 ## Config
 
@@ -65,7 +69,7 @@ The unit restarts on crash and starts at boot. Bind address and port come from `
 
 ### Telegram alerts
 
-Do **not** put the bot token in `config.yaml` or git. Copy `secrets/telegram.env.example` to `secrets/telegram.env`, `chmod 600` it, paste `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, then restart.
+Do **not** put the bot token in `config.yaml` or git. On the systemd host, the file is `/etc/lan-watch/telegram.env` (mode 600, owned by `lanwatch`). Locally or on the test tree, copy `secrets/telegram.env.example` to `secrets/telegram.env`.
 
 On the test host:
 
@@ -84,7 +88,7 @@ Alerts fire only on state edges (down / recovery), not on every missed ping. Dow
 
 The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Cards sort down-first and can be filtered by name or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
 
-Each sweep sends `packets` pings (default 5). A sweep counts as up if at least one reply arrives; loss % and RTT spread are shown on the card. History lives in `data/lan-watch.db` and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
+Each sweep sends `packets` pings (default 5). A sweep counts as up if at least one reply arrives; loss % and RTT spread are shown on the card. History lives in `data/lan-watch.db` locally, or `/var/lib/lan-watch/` on the systemd host, and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
 
 ## Notes
 
