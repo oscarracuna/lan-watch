@@ -58,7 +58,27 @@ The unit restarts on crash and starts at boot. Bind address and port come from `
 | `degraded_loss_pct` | Amber state when packet loss is at or above this; `0` disables it |
 | `packets` | ICMP echoes per host per sweep (used for loss % and min/median/max RTT) |
 | `heartbeat_ticks` | How many recent sweeps to show as ticks on each card |
+| `telegram_enabled` | Send down/up alerts to Telegram when secrets are present |
+| `alert_on_recovery` | Also send a message when a host comes back |
+| `alert_cooldown_seconds` | Minimum time between identical Telegram messages for one host |
 | `hosts` | List of `{name, ip}` |
+
+### Telegram alerts
+
+Do **not** put the bot token in `config.yaml` or git. Copy `secrets/telegram.env.example` to `secrets/telegram.env`, `chmod 600` it, paste `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, then restart.
+
+On the test host:
+
+```bash
+nano ~/lan-watch-test/secrets/telegram.env
+chmod 600 ~/lan-watch-test/secrets/telegram.env
+# Open the bot in Telegram, tap Start, send any message
+~/lan-watch-test/scripts/telegram-chat-id.sh   # copy chat.id into TELEGRAM_CHAT_ID
+~/lan-watch-test/scripts/telegram-test.sh
+~/lan-watch-test/scripts/stop.sh && ~/lan-watch-test/scripts/start.sh
+```
+
+The Linux box must reach `api.telegram.org:443`.
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 

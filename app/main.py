@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import load_config
+from app.notify import TelegramNotifier, load_secrets
 from app.pinger import Hub, PingEngine
 from app.store import Store
 
@@ -20,10 +21,13 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    load_secrets()
     settings = load_config()
     store = Store()
     hub = Hub()
-    engine = PingEngine(settings, store, hub)
+    notifier = TelegramNotifier()
+    notifier.ready(settings)
+    engine = PingEngine(settings, store, hub, notifier)
     app.state.settings = settings
     app.state.store = store
     app.state.hub = hub
