@@ -32,16 +32,20 @@ async def lifespan(app: FastAPI):
     app.state.store = store
     app.state.hub = hub
     app.state.engine = engine
-    task = asyncio.create_task(engine.run())
+    ping_task = asyncio.create_task(engine.run())
+    cmd_task = asyncio.create_task(notifier.poll_commands(engine))
     try:
         yield
     finally:
         engine.stop()
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        notifier.stop()
+        ping_task.cancel()
+        cmd_task.cancel()
+        for task in (ping_task, cmd_task):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         store.close()
 
 
