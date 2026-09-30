@@ -63,6 +63,7 @@ The unit restarts on crash and starts at boot. Bind address and port still come 
 | `packets` | ICMP echoes per host per sweep (used for loss % and min/median/max RTT) |
 | `heartbeat_ticks` | How many recent sweeps to show as ticks on each card |
 | `telegram_enabled` | Send down/up alerts to Telegram when secrets are present |
+| `telegram_commands` | Long-poll `/status` (enable on **one** process only) |
 | `alert_on_recovery` | Also send a message when a host comes back |
 | `alert_cooldown_seconds` | Minimum time between identical Telegram messages for one host |
 | `hosts` | List of `{name, ip}` |
@@ -83,6 +84,8 @@ chmod 600 ~/lan-watch-test/secrets/telegram.env
 ```
 
 The Linux box must reach `api.telegram.org:443`.
+
+With `telegram_commands: true`, the same bot answers `/status` (and `/start`) from your `TELEGRAM_CHAT_ID` only. Other chats are ignored. Telegram long-polls `getUpdates`, so nothing extra is opened on the LAN. Only one LAN Watch process should have commands on, or the two will steal updates from each other — leave it off on the 8081 test tree when prod is polling.
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 

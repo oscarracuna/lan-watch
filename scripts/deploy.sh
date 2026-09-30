@@ -93,6 +93,7 @@ ensure_key() {
 }
 
 ensure_key "telegram_enabled" "telegram_enabled: true"
+ensure_key "telegram_commands" "telegram_commands: true"
 ensure_key "alert_on_recovery" "alert_on_recovery: true"
 ensure_key "alert_cooldown_seconds" "alert_cooldown_seconds: 900"
 

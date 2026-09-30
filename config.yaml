@@ -11,6 +11,7 @@ degraded_loss_pct: 40      # amber when packet loss is at or above this; 0 disab
 packets: 5                 # ICMP echoes per host per sweep (loss + jitter)
 heartbeat_ticks: 48        # recent sweep ticks shown on each card
 telegram_enabled: false    # token lives in secrets/telegram.env, not here
+telegram_commands: true    # /status in Telegram; enable on only one LAN Watch process
 alert_on_recovery: true
 alert_cooldown_seconds: 900
 
