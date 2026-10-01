@@ -85,7 +85,7 @@ chmod 600 ~/lan-watch-test/secrets/telegram.env
 
 The Linux box must reach `api.telegram.org:443`.
 
-With `telegram_commands: true`, the same bot answers `/status` (and `/start`) from your `TELEGRAM_CHAT_ID` only. Other chats are ignored. Telegram long-polls `getUpdates`, so nothing extra is opened on the LAN. Only one LAN Watch process should have commands on, or the two will steal updates from each other — leave it off on the 8081 test tree when prod is polling.
+With `telegram_commands: true`, the same bot answers `/status`, `/incidents`, and `/host NAME` (plus `/start`) from your `TELEGRAM_CHAT_ID` only. Other chats are ignored. `/incidents` is the history-window outage log with duration; `/host` matches a name or IP (unique prefix is enough). Telegram long-polls `getUpdates`, so nothing extra is opened on the LAN. Only one LAN Watch process should have commands on, or the two will steal updates from each other — leave it off on the 8081 test tree when prod is polling.
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 

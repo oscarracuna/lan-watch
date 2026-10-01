@@ -40,6 +40,64 @@ def _command(text: str) -> str:
     return first.split("@", 1)[0].lower()
 
 
+def _args(text: str) -> str:
+    parts = (text or "").strip().split(maxsplit=1)
+    return parts[1].strip() if len(parts) > 1 else ""
+
+
+def _fit(text: str) -> str:
+    if len(text) <= TELEGRAM_LIMIT:
+        return text
+    return text[: TELEGRAM_LIMIT - 1] + "…"
+
+
+def _ago(ts: float | None) -> str:
+    if ts is None:
+        return "—"
+    age = max(0, int(time.time() - float(ts)))
+    if age < 60:
+        return f"{age}s ago"
+    if age < 3600:
+        return f"{age // 60}m ago"
+    hours, minutes = divmod(age, 3600)
+    if hours < 48:
+        return f"{hours}h {minutes // 60}m ago" if minutes >= 60 else f"{hours}h ago"
+    return f"{age // 86400}d ago"
+
+
+def _span(seconds: float) -> str:
+    age = max(0, int(seconds))
+    if age < 60:
+        return f"{age}s"
+    if age < 3600:
+        return f"{age // 60}m"
+    hours, minutes = divmod(age, 3600)
+    if hours < 48:
+        return f"{hours}h {minutes // 60}m" if minutes >= 60 else f"{hours}h"
+    return f"{age // 86400}d"
+
+
+def find_hosts(hosts: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    q = query.strip().lower()
+    if not q:
+        return []
+    exact = [
+        host
+        for host in hosts
+        if str(host.get("ip") or "").lower() == q or str(host.get("name") or "").lower() == q
+    ]
+    if exact:
+        return exact
+    starts = [host for host in hosts if str(host.get("name") or "").lower().startswith(q)]
+    if starts:
+        return starts
+    return [
+        host
+        for host in hosts
+        if q in str(host.get("name") or "").lower() or q in str(host.get("ip") or "").lower()
+    ]
+
+
 def _display_status(host: dict[str, Any], cfg: dict[str, Any]) -> str:
     status = str(host.get("status") or "unknown")
     if status != "up":
@@ -107,11 +165,6 @@ def format_status_message(snapshot: dict[str, Any]) -> str:
         age = max(0, int(time.time() - float(sweep)))
         header += f"\nUpdated {age}s ago"
 
-    def _fit(text: str) -> str:
-        if len(text) <= TELEGRAM_LIMIT:
-            return text
-        return text[: TELEGRAM_LIMIT - 1] + "…"
-
     if counts["down"] == 0 and counts["degraded"] == 0 and counts["unknown"] == 0:
         up_block = "\n".join(_host_line(host, "up") for _, host in labeled)
         full = header + "\nAll hosts up.\n" + up_block
@@ -136,6 +189,115 @@ def format_status_message(snapshot: dict[str, Any]) -> str:
             return candidate
         body += f"\n\n{counts['up']} up."
     return _fit(body)
+
+
+def _incident_duration(item: dict[str, Any]) -> float:
+    down_ts = float(item.get("down_ts") or 0)
+    up_ts = item.get("up_ts")
+    duration = item.get("duration_seconds")
+    if duration is not None:
+        return max(0.0, float(duration))
+    end = float(up_ts) if up_ts is not None else time.time()
+    return max(0.0, end - down_ts)
+
+
+def format_incidents_message(snapshot: dict[str, Any]) -> str:
+    cfg = dict(snapshot.get("config") or {})
+    try:
+        hours_n = float(cfg.get("history_hours") or 24)
+    except (TypeError, ValueError):
+        hours_n = 24.0
+    incidents = list(snapshot.get("incidents") or [])
+    if not incidents:
+        return f"LAN Watch: no incidents in the last {hours_n:g}h."
+
+    open_ones = [item for item in incidents if item.get("up_ts") is None]
+    closed = [item for item in incidents if item.get("up_ts") is not None]
+    header = (
+        f"LAN Watch incidents ({hours_n:g}h): {len(incidents)}"
+        f" · {len(open_ones)} still down"
+    )
+
+    def _line(item: dict[str, Any], open_now: bool) -> str:
+        name = _clean(str(item.get("name") or "host"))
+        ip = _clean(str(item.get("ip") or ""))
+        lasted = _span(_incident_duration(item))
+        if open_now:
+            return f"  {name}  {ip}  {lasted} (still down)"
+        return f"  {name}  {ip}  {lasted}  ended {_ago(item.get('up_ts'))}"
+
+    sections: list[str] = [header]
+    if open_ones:
+        sections.append("STILL DOWN\n" + "\n".join(_line(item, True) for item in open_ones))
+    if closed:
+        sections.append("CLOSED\n" + "\n".join(_line(item, False) for item in closed))
+    return _fit("\n\n".join(sections))
+
+
+def format_host_message(snapshot: dict[str, Any], query: str) -> str:
+    hosts = list(snapshot.get("hosts") or [])
+    cfg = dict(snapshot.get("config") or {})
+    try:
+        hours_n = float(cfg.get("history_hours") or 24)
+    except (TypeError, ValueError):
+        hours_n = 24.0
+    if not query:
+        return "Usage: /host NAS or /host 192.168.1.10"
+    matches = find_hosts(hosts, query)
+    if not matches:
+        return f"Unknown host {query}. Send /status for the list."
+    if len(matches) > 1:
+        lines = [_host_line(host, _display_status(host, cfg)).strip() for host in matches]
+        return _fit(
+            "Multiple hosts matched. Be more specific:\n"
+            + "\n".join(f"  {line}" for line in lines)
+        )
+
+    host = matches[0]
+    kind = _display_status(host, cfg)
+    name = _clean(str(host.get("name") or "host"))
+    ip = _clean(str(host.get("ip") or ""))
+    lines = [f"{name}  {ip}", kind.upper()]
+    rtt = host.get("last_rtt_ms")
+    rtt_min = host.get("rtt_min_ms")
+    rtt_max = host.get("rtt_max_ms")
+    loss = host.get("loss_pct")
+    packets = host.get("packets")
+    packets_ok = host.get("packets_ok")
+    if rtt is not None:
+        spread = ""
+        if rtt_min is not None and rtt_max is not None:
+            spread = f"  ({_fmt_rtt(float(rtt_min))}–{_fmt_rtt(float(rtt_max))})"
+        lines.append(f"RTT {_fmt_rtt(float(rtt))}{spread}")
+    if loss is not None:
+        extra = ""
+        if packets_ok is not None and packets is not None:
+            extra = f"  ({packets_ok}/{packets} replies)"
+        lines.append(f"Loss {float(loss):.0f}%{extra}")
+    uptime = host.get("uptime_pct")
+    if uptime is not None:
+        lines.append(f"Uptime {float(uptime):.1f}% ({hours_n:g}h)")
+    lines.append(f"Last ok  {_ago(host.get('last_ok_ts'))}")
+    lines.append(f"Last fail  {_ago(host.get('last_fail_ts'))}")
+    lines.append(f"Last change  {_ago(host.get('last_change_ts'))}")
+
+    key = str(host.get("host_key") or host.get("ip") or "")
+    related = [
+        item
+        for item in snapshot.get("incidents") or []
+        if str(item.get("host_key") or "") == key or str(item.get("ip") or "") == ip
+    ]
+    if related:
+        rows = []
+        for item in related[:8]:
+            lasted = _span(_incident_duration(item))
+            if item.get("up_ts") is None:
+                rows.append(f"  still down  {lasted}")
+            else:
+                rows.append(f"  {lasted}  ended {_ago(item.get('up_ts'))}")
+        lines.append("Incidents")
+        lines.extend(rows)
+    return _fit("\n".join(lines))
 
 
 def telegram_api(
@@ -259,6 +421,8 @@ class TelegramNotifier:
             {
                 "commands": [
                     {"command": "status", "description": "LAN health overview"},
+                    {"command": "incidents", "description": "Outages in the history window"},
+                    {"command": "host", "description": "One host by name or IP"},
                     {"command": "start", "description": "What this bot can do"},
                 ]
             },
@@ -277,7 +441,7 @@ class TelegramNotifier:
             offset = int(results[-1].get("update_id") or 0) + 1
         self._offset = offset
         self._commands_ready = True
-        log.info("Telegram /status commands enabled")
+        log.info("Telegram commands enabled")
 
     def _handle_message(
         self,
@@ -293,11 +457,22 @@ class TelegramNotifier:
             if chat_id is not None:
                 log.info("Ignored Telegram command from chat %s", chat_id)
             return
-        cmd = _command(str(message.get("text") or ""))
+        raw = str(message.get("text") or "")
+        cmd = _command(raw)
+        data = snapshot()
         if cmd in {"/start", "/help"}:
-            text = "LAN Watch. Send /status for a down-first health overview."
+            text = (
+                "LAN Watch commands:\n"
+                "/status — down-first health overview\n"
+                "/incidents — outages in the history window\n"
+                "/host NAME — one host (name or IP)"
+            )
         elif cmd == "/status":
-            text = format_status_message(snapshot())
+            text = format_status_message(data)
+        elif cmd == "/incidents":
+            text = format_incidents_message(data)
+        elif cmd == "/host":
+            text = format_host_message(data, _args(raw))
         else:
             return
         self.send_sync(text, token, str(chat_id))
