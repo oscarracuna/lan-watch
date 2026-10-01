@@ -98,12 +98,38 @@ def find_hosts(hosts: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     ]
 
 
+def _degraded_ms(host: dict[str, Any], cfg: dict[str, Any]) -> float:
+    if host.get("degraded_ms") is not None:
+        return float(host["degraded_ms"])
+    key = "endpoint_degraded_ms" if str(host.get("role") or "gateway") == "endpoint" else "degraded_ms"
+    default = 500.0 if key == "endpoint_degraded_ms" else 200.0
+    try:
+        return float(cfg.get(key) if cfg.get(key) is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _degraded_loss(host: dict[str, Any], cfg: dict[str, Any]) -> float:
+    if host.get("degraded_loss_pct") is not None:
+        return float(host["degraded_loss_pct"])
+    key = (
+        "endpoint_degraded_loss_pct"
+        if str(host.get("role") or "gateway") == "endpoint"
+        else "degraded_loss_pct"
+    )
+    default = 70.0 if key == "endpoint_degraded_loss_pct" else 40.0
+    try:
+        return float(cfg.get(key) if cfg.get(key) is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
 def _display_status(host: dict[str, Any], cfg: dict[str, Any]) -> str:
     status = str(host.get("status") or "unknown")
     if status != "up":
         return status or "unknown"
-    degraded_ms = float(cfg.get("degraded_ms") or 0)
-    degraded_loss = float(cfg.get("degraded_loss_pct") or 0)
+    degraded_ms = _degraded_ms(host, cfg)
+    degraded_loss = _degraded_loss(host, cfg)
     rtt = host.get("last_rtt_ms")
     loss = host.get("loss_pct")
     if degraded_ms > 0 and rtt is not None and float(rtt) >= degraded_ms:
@@ -135,6 +161,32 @@ def _host_line(host: dict[str, Any], kind: str) -> str:
     return "  " + "  ".join(bits)
 
 
+def _status_block(labeled: list[tuple[str, dict[str, Any]]]) -> str:
+    labeled = sorted(
+        labeled,
+        key=lambda item: (
+            STATUS_ORDER.get(item[0], 9),
+            str(item[1].get("name") or "").lower(),
+        ),
+    )
+    counts = {"down": 0, "degraded": 0, "unknown": 0, "up": 0}
+    for kind, _ in labeled:
+        counts[kind] = counts.get(kind, 0) + 1
+    if counts["down"] == 0 and counts["degraded"] == 0 and counts["unknown"] == 0:
+        return "\n".join(_host_line(host, "up") for _, host in labeled)
+    sections: list[str] = []
+    for kind, title in (
+        ("down", "DOWN"),
+        ("degraded", "DEGRADED"),
+        ("unknown", "WAITING"),
+        ("up", "UP"),
+    ):
+        rows = [_host_line(host, kind) for item_kind, host in labeled if item_kind == kind]
+        if rows:
+            sections.append(title + "\n" + "\n".join(rows))
+    return "\n\n".join(sections)
+
+
 def format_status_message(snapshot: dict[str, Any]) -> str:
     hosts = list(snapshot.get("hosts") or [])
     cfg = dict(snapshot.get("config") or {})
@@ -142,12 +194,6 @@ def format_status_message(snapshot: dict[str, Any]) -> str:
         return "LAN Watch: no hosts configured."
 
     labeled = [(_display_status(host, cfg), host) for host in hosts]
-    labeled.sort(
-        key=lambda item: (
-            STATUS_ORDER.get(item[0], 9),
-            str(item[1].get("name") or "").lower(),
-        )
-    )
     counts = {"down": 0, "degraded": 0, "unknown": 0, "up": 0}
     for kind, _ in labeled:
         counts[kind] = counts.get(kind, 0) + 1
@@ -165,30 +211,18 @@ def format_status_message(snapshot: dict[str, Any]) -> str:
         age = max(0, int(time.time() - float(sweep)))
         header += f"\nUpdated {age}s ago"
 
-    if counts["down"] == 0 and counts["degraded"] == 0 and counts["unknown"] == 0:
-        up_block = "\n".join(_host_line(host, "up") for _, host in labeled)
-        full = header + "\nAll hosts up.\n" + up_block
-        if len(full) <= TELEGRAM_LIMIT:
-            return full
-        return header + "\nAll hosts up."
-
-    sections: list[str] = []
-    for kind, title in (
-        ("down", "DOWN"),
-        ("degraded", "DEGRADED"),
-        ("unknown", "WAITING"),
-    ):
-        rows = [_host_line(host, kind) for item_kind, host in labeled if item_kind == kind]
-        if rows:
-            sections.append(title + "\n" + "\n".join(rows))
-    body = header + "\n\n" + "\n\n".join(sections)
-    up_rows = [_host_line(host, "up") for item_kind, host in labeled if item_kind == "up"]
-    if up_rows:
-        candidate = body + "\n\nUP\n" + "\n".join(up_rows)
-        if len(candidate) <= TELEGRAM_LIMIT:
-            return candidate
-        body += f"\n\n{counts['up']} up."
-    return _fit(body)
+    gateways = [
+        item for item in labeled if str(item[1].get("role") or "gateway") != "endpoint"
+    ]
+    endpoints = [
+        item for item in labeled if str(item[1].get("role") or "gateway") == "endpoint"
+    ]
+    chunks = [header]
+    if gateways:
+        chunks.append("GATEWAYS\n" + _status_block(gateways))
+    if endpoints:
+        chunks.append("ENDPOINTS\n" + _status_block(endpoints))
+    return _fit("\n\n".join(chunks))
 
 
 def _incident_duration(item: dict[str, Any]) -> float:
@@ -255,9 +289,10 @@ def format_host_message(snapshot: dict[str, Any], query: str) -> str:
 
     host = matches[0]
     kind = _display_status(host, cfg)
+    role = str(host.get("role") or "gateway").upper()
     name = _clean(str(host.get("name") or "host"))
     ip = _clean(str(host.get("ip") or ""))
-    lines = [f"{name}  {ip}", kind.upper()]
+    lines = [f"{name}  {ip}", f"{role} · {kind.upper()}"]
     rtt = host.get("last_rtt_ms")
     rtt_min = host.get("rtt_min_ms")
     rtt_max = host.get("rtt_max_ms")

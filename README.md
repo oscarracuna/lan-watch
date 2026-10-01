@@ -17,7 +17,7 @@ python -m app
 
 Open http://127.0.0.1:8080/ on this machine (or `http://<this-pc>:8080/` from another LAN device).
 
-`127.0.0.1` is included as **This host** so you should see at least one green card immediately. Edit `config.yaml` and add the private IPs you care about. The file is reloaded on change; you do not need to restart after adding hosts.
+`127.0.0.1` is included as **This host** so you should see at least one green card immediately. Edit `config.yaml`: `hosts` are **Gateways** (top of the dashboard); `endpoints` are the section below, with looser down/degraded thresholds. The file is reloaded on change; you do not need to restart after adding hosts.
 
 Listen address and port changes in `config.yaml` need a restart.
 
@@ -54,19 +54,24 @@ The unit restarts on crash and starts at boot. Bind address and port still come 
 | --- | --- |
 | `interval_seconds` | Time between ping sweeps |
 | `timeout_seconds` | Per-host ping timeout |
-| `fail_threshold` | Consecutive misses before **Down** |
-| `recover_threshold` | Consecutive hits before **Up** |
+| `fail_threshold` | Consecutive misses before **Down** (gateways in `hosts`) |
+| `recover_threshold` | Consecutive hits before **Up** (gateways) |
+| `endpoint_fail_threshold` | Consecutive misses before **Down** for `endpoints` (default 8) |
+| `endpoint_recover_threshold` | Consecutive hits before **Up** for `endpoints` (default 3) |
 | `history_hours` | How long samples are kept |
 | `alert_sound` | Allow the dashboard beep (users can still mute in the page) |
-| `degraded_ms` | Amber state when up but median RTT is at or above this; `0` disables it |
-| `degraded_loss_pct` | Amber state when packet loss is at or above this; `0` disables it |
+| `degraded_ms` | Amber state for gateways when up but median RTT is at or above this; `0` disables it |
+| `degraded_loss_pct` | Amber state for gateways when packet loss is at or above this; `0` disables it |
+| `endpoint_degraded_ms` | Amber RTT threshold for endpoints (default 500) |
+| `endpoint_degraded_loss_pct` | Amber loss threshold for endpoints (default 70) |
 | `packets` | ICMP echoes per host per sweep (used for loss % and min/median/max RTT) |
 | `heartbeat_ticks` | How many recent sweeps to show as ticks on each card |
 | `telegram_enabled` | Send down/up alerts to Telegram when secrets are present |
 | `telegram_commands` | Long-poll `/status` (enable on **one** process only) |
 | `alert_on_recovery` | Also send a message when a host comes back |
 | `alert_cooldown_seconds` | Minimum time between identical Telegram messages for one host |
-| `hosts` | List of `{name, ip}` |
+| `hosts` | Gateways: list of `{name, ip}` (top dashboard section) |
+| `endpoints` | Endpoints: same shape, shown below gateways |
 
 ### Telegram alerts
 
@@ -89,7 +94,7 @@ With `telegram_commands: true`, the same bot answers `/status`, `/incidents`, an
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 
-The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Cards sort down-first and can be filtered by name or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
+The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Gateways sit above endpoints; cards sort down-first within each section and can be filtered by name or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
 
 Each sweep sends `packets` pings (default 5). A sweep counts as up if at least one reply arrives; loss % and RTT spread are shown on the card. History lives in `data/lan-watch.db` locally, or `/var/lib/lan-watch/` on the systemd host, and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
 

@@ -2,12 +2,16 @@ listen: 0.0.0.0
 port: 8080
 interval_seconds: 5
 timeout_seconds: 1
-fail_threshold: 3          # consecutive misses before Down
-recover_threshold: 2       # consecutive hits before Up
+fail_threshold: 3          # consecutive misses before Down (gateways)
+recover_threshold: 2       # consecutive hits before Up (gateways)
+endpoint_fail_threshold: 8
+endpoint_recover_threshold: 3
 history_hours: 24
 alert_sound: true
-degraded_ms: 200           # 0 disables the amber "degraded" state
+degraded_ms: 200           # 0 disables the amber "degraded" state (gateways)
 degraded_loss_pct: 40      # amber when packet loss is at or above this; 0 disables
+endpoint_degraded_ms: 500
+endpoint_degraded_loss_pct: 70
 packets: 5                 # ICMP echoes per host per sweep (loss + jitter)
 heartbeat_ticks: 48        # recent sweep ticks shown on each card
 telegram_enabled: false    # token lives in secrets/telegram.env, not here
@@ -22,3 +26,7 @@ hosts:
     ip: 192.168.1.1
   - name: NAS
     ip: 192.168.1.10
+
+endpoints: []
+#   - name: Camera lobby
+#     ip: 192.168.1.50

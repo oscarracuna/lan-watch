@@ -23,6 +23,11 @@ PERSIST_SKIP = {
     "rtt_max_ms",
     "packets_ok",
     "packets",
+    "role",
+    "fail_threshold",
+    "recover_threshold",
+    "degraded_ms",
+    "degraded_loss_pct",
 }
 
 
@@ -31,6 +36,11 @@ class HostState:
     host_key: str
     name: str
     ip: str
+    role: str = "gateway"
+    fail_threshold: int = 3
+    recover_threshold: int = 2
+    degraded_ms: float = 200.0
+    degraded_loss_pct: float = 40.0
     status: str = "unknown"
     consecutive_ok: int = 0
     consecutive_fail: int = 0
@@ -165,7 +175,22 @@ class PingEngine:
 
     def _sorted_states(self) -> list[HostState]:
         order = {host.ip: index for index, host in enumerate(self.settings.hosts)}
-        return sorted(self.states.values(), key=lambda s: (order.get(s.ip, 9999), s.name))
+        return sorted(
+            self.states.values(),
+            key=lambda s: (
+                0 if s.role == "gateway" else 1,
+                order.get(s.ip, 9999),
+                s.name,
+            ),
+        )
+
+    def _sync_host_meta(self, state: HostState, host: Any) -> None:
+        state.name = host.name
+        state.role = host.role
+        state.fail_threshold = host.fail_threshold
+        state.recover_threshold = host.recover_threshold
+        state.degraded_ms = host.degraded_ms
+        state.degraded_loss_pct = host.degraded_loss_pct
 
     def _apply_hosts(self, settings: Settings, restore: bool = False) -> None:
         saved = self.store.load_states() if restore else {}
@@ -176,7 +201,7 @@ class PingEngine:
         ticks = settings.heartbeat_ticks
         for ip, host in wanted.items():
             if ip in self.states:
-                self.states[ip].name = host.name
+                self._sync_host_meta(self.states[ip], host)
                 self.states[ip].heartbeat = self.states[ip].heartbeat[-ticks:]
                 continue
             row = saved.get(ip)
@@ -195,13 +220,16 @@ class PingEngine:
                     last_sample_ts=row.get("last_sample_ts"),
                     heartbeat=self.store.recent_ticks(ip, ticks),
                 )
+                self._sync_host_meta(state, host)
                 self.states[ip] = state
                 if state.status == "down":
                     self.store.open_incident(
                         ip, host.name, ip, float(state.last_change_ts or time.time())
                     )
             else:
-                self.states[ip] = HostState(host_key=ip, name=host.name, ip=ip)
+                state = HostState(host_key=ip, name=host.name, ip=ip)
+                self._sync_host_meta(state, host)
+                self.states[ip] = state
 
     def _maybe_reload_config(self) -> None:
         mtime = config_mtime()
@@ -259,14 +287,14 @@ class PingEngine:
             state.consecutive_fail = 0
             state.last_rtt_ms = rtt_ms
             state.last_ok_ts = ts
-            if state.status != "up" and state.consecutive_ok >= self.settings.recover_threshold:
+            if state.status != "up" and state.consecutive_ok >= state.recover_threshold:
                 state.status = "up"
                 state.last_change_ts = ts
         else:
             state.consecutive_fail += 1
             state.consecutive_ok = 0
             state.last_fail_ts = ts
-            if state.status != "down" and state.consecutive_fail >= self.settings.fail_threshold:
+            if state.status != "down" and state.consecutive_fail >= state.fail_threshold:
                 state.status = "down"
                 state.last_change_ts = ts
 
