@@ -52,12 +52,20 @@ function syncMuteButton() {
   el.mute.classList.toggle("active", !isMuted);
 }
 
+function hostRole(host) {
+  return host.role === "endpoint" ? "endpoint" : "gateway";
+}
+
 function displayStatus(host) {
   if (host.status !== "up") return host.status || "unknown";
-  if (config.degraded_ms > 0 && host.last_rtt_ms != null && host.last_rtt_ms >= config.degraded_ms) {
+  const degradedMs = host.degraded_ms != null ? Number(host.degraded_ms) : Number(config.degraded_ms || 0);
+  const degradedLoss = host.degraded_loss_pct != null
+    ? Number(host.degraded_loss_pct)
+    : Number(config.degraded_loss_pct || 0);
+  if (degradedMs > 0 && host.last_rtt_ms != null && host.last_rtt_ms >= degradedMs) {
     return "degraded";
   }
-  if (config.degraded_loss_pct > 0 && host.loss_pct != null && host.loss_pct >= config.degraded_loss_pct) {
+  if (degradedLoss > 0 && host.loss_pct != null && host.loss_pct >= degradedLoss) {
     return "degraded";
   }
   return "up";
@@ -139,6 +147,7 @@ let lastGridKey = "";
 function gridKey(visible) {
   return visible.map((host) => [
     host.host_key,
+    host.role || "gateway",
     displayStatus(host),
     host.last_rtt_ms,
     host.loss_pct,
@@ -147,6 +156,84 @@ function gridKey(visible) {
     (host.heartbeat || []).join(""),
     host.uptime_pct,
   ].join(":")).join("|") + "::" + searchQuery;
+}
+
+function sortHosts(list) {
+  return [...list].sort((a, b) => {
+    const sa = STATUS_ORDER[displayStatus(a)] ?? 9;
+    const sb = STATUS_ORDER[displayStatus(b)] ?? 9;
+    if (sa !== sb) return sa - sb;
+    return String(a.name).localeCompare(String(b.name));
+  });
+}
+
+function cardHtml(host) {
+  const status = displayStatus(host);
+  const rtt = status === "down" || status === "unknown"
+    ? "—"
+    : `${fmtRtt(host.last_rtt_ms)}<small> ms</small>`;
+  const loss = host.loss_pct == null ? "—" : `${fmtLoss(host.loss_pct)} loss`;
+  const spread = host.rtt_min_ms != null && host.rtt_max_ms != null
+    ? `${fmtRtt(host.rtt_min_ms)}–${fmtRtt(host.rtt_max_ms)} ms`
+    : "";
+  const detail = status === "down"
+    ? `Down for <span data-duration="${host.last_change_ts || ""}">${fmtDuration(host.last_change_ts)}</span>`
+    : `Uptime ${host.uptime_pct == null ? "—" : host.uptime_pct.toFixed(1) + "%"}`;
+  const last = status === "down"
+    ? `Last ok <span data-ago="${host.last_ok_ts || ""}">${fmtAgo(host.last_ok_ts)}</span>`
+    : `<span data-ago="${host.last_sample_ts || ""}">${fmtAgo(host.last_sample_ts)}</span>`;
+  const ticks = (host.heartbeat || []).map((tick) => `<i class="${tick}"></i>`).join("");
+  return `
+      <article class="card ${status}" data-key="${host.host_key}" role="button" tabindex="0">
+        <div class="badge">${status}</div>
+        <h3>${escapeHtml(host.name)}</h3>
+        <div class="ip">${escapeHtml(host.ip)}</div>
+        <div class="rtt">${rtt}</div>
+        <div class="stats-row"><span>${loss}</span><span>${spread}</span></div>
+        <div class="ticks" aria-hidden="true">${ticks}</div>
+        <div class="meta"><span>${detail}</span><span>${last}</span></div>
+      </article>
+    `;
+}
+
+function sectionHtml(title, list, emptyText, { showEmpty }) {
+  if (!list.length) {
+    if (!showEmpty) return "";
+    return `
+      <section class="host-section">
+        <div class="section-head">
+          <h2>${escapeHtml(title)}</h2>
+          <span class="hint">0</span>
+        </div>
+        <p class="empty">${escapeHtml(emptyText)}</p>
+      </section>
+    `;
+  }
+  const counts = { up: 0, down: 0, degraded: 0, unknown: 0 };
+  list.forEach((host) => {
+    counts[displayStatus(host)] = (counts[displayStatus(host)] || 0) + 1;
+  });
+  return `
+    <section class="host-section">
+      <div class="section-head">
+        <h2>${escapeHtml(title)}</h2>
+        <span class="hint">${list.length} · ${counts.down} down</span>
+      </div>
+      <div class="grid">${sortHosts(list).map(cardHtml).join("")}</div>
+    </section>
+  `;
+}
+
+function bindCards() {
+  el.grid.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("click", () => openDrawer(card.dataset.key));
+    card.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        openDrawer(card.dataset.key);
+      }
+    });
+  });
 }
 
 function render() {
@@ -166,20 +253,17 @@ function render() {
   renderIncidents();
 
   const q = searchQuery.trim().toLowerCase();
-  const visible = list
-    .filter((host) => {
-      if (!q) return true;
-      return host.name.toLowerCase().includes(q) || host.ip.toLowerCase().includes(q);
-    })
-    .sort((a, b) => {
-      const sa = STATUS_ORDER[displayStatus(a)] ?? 9;
-      const sb = STATUS_ORDER[displayStatus(b)] ?? 9;
-      if (sa !== sb) return sa - sb;
-      return String(a.name).localeCompare(String(b.name));
-    });
+  const matches = (host) => {
+    if (!q) return true;
+    return host.name.toLowerCase().includes(q) || host.ip.toLowerCase().includes(q);
+  };
+  const gateways = list.filter((host) => hostRole(host) === "gateway" && matches(host));
+  const endpoints = list.filter((host) => hostRole(host) === "endpoint" && matches(host));
+  const visible = [...gateways, ...endpoints];
+  const searching = Boolean(q);
 
-  const key = gridKey(visible);
-  if (key === lastGridKey && el.grid.querySelector(".card")) {
+  const key = `${gridKey(visible)}::${searching}::${gateways.length}:${endpoints.length}`;
+  if (key === lastGridKey && (el.grid.querySelector(".card") || el.grid.querySelector(".host-section"))) {
     refreshRelativeTimes();
     return;
   }
@@ -189,49 +273,17 @@ function render() {
     el.grid.innerHTML = `<p class="empty">No hosts in config.yaml yet.</p>`;
     return;
   }
-  if (!visible.length) {
+  if (searching && !visible.length) {
     el.grid.innerHTML = `<p class="empty">No hosts match “${escapeHtml(searchQuery)}”.</p>`;
     return;
   }
 
-  el.grid.innerHTML = visible.map((host) => {
-    const status = displayStatus(host);
-    const rtt = status === "down" || status === "unknown"
-      ? "—"
-      : `${fmtRtt(host.last_rtt_ms)}<small> ms</small>`;
-    const loss = host.loss_pct == null ? "—" : `${fmtLoss(host.loss_pct)} loss`;
-    const spread = host.rtt_min_ms != null && host.rtt_max_ms != null
-      ? `${fmtRtt(host.rtt_min_ms)}–${fmtRtt(host.rtt_max_ms)} ms`
-      : "";
-    const detail = status === "down"
-      ? `Down for <span data-duration="${host.last_change_ts || ""}">${fmtDuration(host.last_change_ts)}</span>`
-      : `Uptime ${host.uptime_pct == null ? "—" : host.uptime_pct.toFixed(1) + "%"}`;
-    const last = status === "down"
-      ? `Last ok <span data-ago="${host.last_ok_ts || ""}">${fmtAgo(host.last_ok_ts)}</span>`
-      : `<span data-ago="${host.last_sample_ts || ""}">${fmtAgo(host.last_sample_ts)}</span>`;
-    const ticks = (host.heartbeat || []).map((tick) => `<i class="${tick}"></i>`).join("");
-    return `
-      <article class="card ${status}" data-key="${host.host_key}" role="button" tabindex="0">
-        <div class="badge">${status}</div>
-        <h3>${escapeHtml(host.name)}</h3>
-        <div class="ip">${escapeHtml(host.ip)}</div>
-        <div class="rtt">${rtt}</div>
-        <div class="stats-row"><span>${loss}</span><span>${spread}</span></div>
-        <div class="ticks" aria-hidden="true">${ticks}</div>
-        <div class="meta"><span>${detail}</span><span>${last}</span></div>
-      </article>
-    `;
-  }).join("");
+  el.grid.innerHTML = [
+    sectionHtml("Gateways", gateways, "No gateways in config.yaml yet.", { showEmpty: !searching }),
+    sectionHtml("Endpoints", endpoints, "Add endpoints under endpoints: in config.yaml.", { showEmpty: !searching }),
+  ].join("");
 
-  el.grid.querySelectorAll(".card").forEach((card) => {
-    card.addEventListener("click", () => openDrawer(card.dataset.key));
-    card.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" || ev.key === " ") {
-        ev.preventDefault();
-        openDrawer(card.dataset.key);
-      }
-    });
-  });
+  bindCards();
 }
 
 function refreshRelativeTimes() {
