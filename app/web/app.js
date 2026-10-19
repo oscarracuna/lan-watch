@@ -53,7 +53,8 @@ function syncMuteButton() {
 }
 
 function hostRole(host) {
-  return host.role === "endpoint" ? "endpoint" : "gateway";
+  if (host.role === "endpoint" || host.role === "timeclock") return host.role;
+  return "gateway";
 }
 
 function displayStatus(host) {
@@ -148,6 +149,7 @@ function gridKey(visible) {
   return visible.map((host) => [
     host.host_key,
     host.role || "gateway",
+    host.location || "",
     displayStatus(host),
     host.last_rtt_ms,
     host.loss_pct,
@@ -183,10 +185,14 @@ function cardHtml(host) {
     ? `Last ok <span data-ago="${host.last_ok_ts || ""}">${fmtAgo(host.last_ok_ts)}</span>`
     : `<span data-ago="${host.last_sample_ts || ""}">${fmtAgo(host.last_sample_ts)}</span>`;
   const ticks = (host.heartbeat || []).map((tick) => `<i class="${tick}"></i>`).join("");
+  const place = host.location
+    ? `<div class="location">${escapeHtml(host.location)}</div>`
+    : "";
   return `
       <article class="card ${status}" data-key="${host.host_key}" role="button" tabindex="0">
         <div class="badge">${status}</div>
         <h3>${escapeHtml(host.name)}</h3>
+        ${place}
         <div class="ip">${escapeHtml(host.ip)}</div>
         <div class="rtt">${rtt}</div>
         <div class="stats-row"><span>${loss}</span><span>${spread}</span></div>
@@ -255,14 +261,19 @@ function render() {
   const q = searchQuery.trim().toLowerCase();
   const matches = (host) => {
     if (!q) return true;
-    return host.name.toLowerCase().includes(q) || host.ip.toLowerCase().includes(q);
+    return (
+      host.name.toLowerCase().includes(q)
+      || host.ip.toLowerCase().includes(q)
+      || String(host.location || "").toLowerCase().includes(q)
+    );
   };
   const gateways = list.filter((host) => hostRole(host) === "gateway" && matches(host));
+  const timeclocks = list.filter((host) => hostRole(host) === "timeclock" && matches(host));
   const endpoints = list.filter((host) => hostRole(host) === "endpoint" && matches(host));
-  const visible = [...gateways, ...endpoints];
+  const visible = [...gateways, ...timeclocks, ...endpoints];
   const searching = Boolean(q);
 
-  const key = `${gridKey(visible)}::${searching}::${gateways.length}:${endpoints.length}`;
+  const key = `${gridKey(visible)}::${searching}::${gateways.length}:${timeclocks.length}:${endpoints.length}`;
   if (key === lastGridKey && (el.grid.querySelector(".card") || el.grid.querySelector(".host-section"))) {
     refreshRelativeTimes();
     return;
@@ -280,6 +291,7 @@ function render() {
 
   el.grid.innerHTML = [
     sectionHtml("Gateways", gateways, "No gateways in config.yaml yet.", { showEmpty: !searching }),
+    sectionHtml("Terminals", timeclocks, "Add timeclocks under timeclocks: in config.yaml.", { showEmpty: !searching }),
     sectionHtml("Endpoints", endpoints, "Add endpoints under endpoints: in config.yaml.", { showEmpty: !searching }),
   ].join("");
 
@@ -408,7 +420,7 @@ async function openDrawer(key) {
   el.drawer.hidden = false;
   el.backdrop.hidden = false;
   el.drawerName.textContent = host.name;
-  el.drawerIp.textContent = host.ip;
+  el.drawerIp.textContent = host.location ? `${host.ip} · ${host.location}` : host.ip;
   el.drawerHint.textContent = "Loading history…";
   el.spark.innerHTML = "";
   try {

@@ -84,7 +84,9 @@ def find_hosts(hosts: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     exact = [
         host
         for host in hosts
-        if str(host.get("ip") or "").lower() == q or str(host.get("name") or "").lower() == q
+        if str(host.get("ip") or "").lower() == q
+        or str(host.get("name") or "").lower() == q
+        or str(host.get("location") or "").lower() == q
     ]
     if exact:
         return exact
@@ -94,7 +96,9 @@ def find_hosts(hosts: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     return [
         host
         for host in hosts
-        if q in str(host.get("name") or "").lower() or q in str(host.get("ip") or "").lower()
+        if q in str(host.get("name") or "").lower()
+        or q in str(host.get("ip") or "").lower()
+        or q in str(host.get("location") or "").lower()
     ]
 
 
@@ -149,6 +153,7 @@ def _fmt_rtt(ms: float) -> str:
 
 def _host_line(host: dict[str, Any], kind: str) -> str:
     name = _clean(str(host.get("name") or "host"))
+    location = _clean(str(host.get("location") or ""))
     ip = _clean(str(host.get("ip") or ""))
     extra: list[str] = []
     rtt = host.get("last_rtt_ms")
@@ -157,7 +162,7 @@ def _host_line(host: dict[str, Any], kind: str) -> str:
         extra.append(_fmt_rtt(float(rtt)))
     if kind == "degraded" and loss is not None and float(loss) > 0:
         extra.append(f"{float(loss):.0f}% loss")
-    bits = [part for part in (name, ip, *extra) if part]
+    bits = [part for part in (name, location, ip, *extra) if part]
     return "  " + "  ".join(bits)
 
 
@@ -211,15 +216,22 @@ def format_status_message(snapshot: dict[str, Any]) -> str:
         age = max(0, int(time.time() - float(sweep)))
         header += f"\nUpdated {age}s ago"
 
-    gateways = [
-        item for item in labeled if str(item[1].get("role") or "gateway") != "endpoint"
-    ]
-    endpoints = [
-        item for item in labeled if str(item[1].get("role") or "gateway") == "endpoint"
-    ]
+    gateways = []
+    timeclocks = []
+    endpoints = []
+    for item in labeled:
+        role = str(item[1].get("role") or "gateway")
+        if role == "timeclock":
+            timeclocks.append(item)
+        elif role == "endpoint":
+            endpoints.append(item)
+        else:
+            gateways.append(item)
     chunks = [header]
     if gateways:
         chunks.append("GATEWAYS\n" + _status_block(gateways))
+    if timeclocks:
+        chunks.append("TERMINALS\n" + _status_block(timeclocks))
     if endpoints:
         chunks.append("ENDPOINTS\n" + _status_block(endpoints))
     return _fit("\n\n".join(chunks))
@@ -292,7 +304,10 @@ def format_host_message(snapshot: dict[str, Any], query: str) -> str:
     role = str(host.get("role") or "gateway").upper()
     name = _clean(str(host.get("name") or "host"))
     ip = _clean(str(host.get("ip") or ""))
+    location = _clean(str(host.get("location") or ""))
     lines = [f"{name}  {ip}", f"{role} · {kind.upper()}"]
+    if location:
+        lines.insert(1, location)
     rtt = host.get("last_rtt_ms")
     rtt_min = host.get("rtt_min_ms")
     rtt_max = host.get("rtt_max_ms")

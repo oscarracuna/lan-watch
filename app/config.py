@@ -36,6 +36,7 @@ class Host:
     name: str
     ip: str
     role: str = "gateway"
+    location: str = ""
     fail_threshold: int = 3
     recover_threshold: int = 2
     degraded_ms: float = 200.0
@@ -122,6 +123,7 @@ def _parse_host_list(
             continue
         ip = str(item.get("ip") or "").strip()
         name = str(item.get("name") or ip).strip()
+        location = str(item.get("location") or "").strip()
         if not ip or ip in seen:
             continue
         seen.add(ip)
@@ -130,6 +132,7 @@ def _parse_host_list(
                 name=name or ip,
                 ip=ip,
                 role=role,
+                location=location,
                 fail_threshold=fail_threshold,
                 recover_threshold=recover_threshold,
                 degraded_ms=degraded_ms,
@@ -176,6 +179,18 @@ def load_config(path: Path | None = None) -> Settings:
             endpoint_recover_threshold,
             endpoint_degraded_ms,
             endpoint_degraded_loss_pct,
+        )
+    )
+    # Same fail, recover, and degraded thresholds as gateways.
+    hosts.extend(
+        _parse_host_list(
+            raw.get("timeclocks"),
+            "timeclock",
+            seen,
+            fail_threshold,
+            recover_threshold,
+            degraded_ms,
+            degraded_loss_pct,
         )
     )
 

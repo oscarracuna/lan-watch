@@ -30,3 +30,11 @@ hosts:
 endpoints: []
 #   - name: Camera lobby
 #     ip: 192.168.1.50
+
+timeclocks: []
+#   - name: Front desk
+#     ip: 192.168.1.40
+#     location: Office
+#   - name: Shop floor
+#     ip: 192.168.2.40
+#     location: Warehouse

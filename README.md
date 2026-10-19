@@ -17,7 +17,7 @@ python -m app
 
 Open http://127.0.0.1:8080/ on this machine (or `http://<this-pc>:8080/` from another LAN device).
 
-`127.0.0.1` is included as **This host** so you should see at least one green card immediately. Edit `config.yaml`: `hosts` are **Gateways** (top of the dashboard); `endpoints` are the section below, with looser down/degraded thresholds. The file is reloaded on change; you do not need to restart after adding hosts.
+`127.0.0.1` is included as **This host** so you should see at least one green card immediately. Edit `config.yaml`: `hosts` are **Gateways** (top of the dashboard); `timeclocks` are **Terminals** (every location, same down and degraded thresholds as gateways); `endpoints` are the section below, with looser down/degraded thresholds. The file is reloaded on change; you do not need to restart after adding hosts.
 
 Listen address and port changes in `config.yaml` need a restart.
 
@@ -71,7 +71,8 @@ The unit restarts on crash and starts at boot. Bind address and port still come 
 | `alert_on_recovery` | Also send a message when a host comes back |
 | `alert_cooldown_seconds` | Minimum time between identical Telegram messages for one host |
 | `hosts` | Gateways: list of `{name, ip}` (top dashboard section) |
-| `endpoints` | Endpoints: same shape, shown below gateways |
+| `timeclocks` | Timeclocks in **Terminals**: `{name, ip, location}` for every location. Down uses `fail_threshold`; amber uses `degraded_ms` and `degraded_loss_pct` (the gateway values). |
+| `endpoints` | Endpoints: same shape as gateways, shown below terminals, with the looser endpoint thresholds |
 
 ### Telegram alerts
 
@@ -94,7 +95,7 @@ With `telegram_commands: true`, the same bot answers `/status`, `/incidents`, an
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 
-The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Gateways sit above endpoints; cards sort down-first within each section and can be filtered by name or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
+The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Gateways sit above terminals, then endpoints. Cards sort down-first within each section and can be filtered by name, location, or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
 
 Each sweep sends `packets` pings (default 5). A sweep counts as up if at least one reply arrives; loss % and RTT spread are shown on the card. History lives in `data/lan-watch.db` locally, or `/var/lib/lan-watch/` on the systemd host, and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
 
