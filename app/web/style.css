@@ -186,6 +186,7 @@ button.active { border-color: var(--up); color: var(--up); }
 .card.degraded { box-shadow: inset 4px 0 0 var(--degraded); }
 .card.unknown { box-shadow: inset 4px 0 0 var(--unknown); }
 .card h3 { margin: 0; font-size: 1.05rem; }
+.card .location { color: var(--muted); font-size: 0.82rem; }
 .card .ip { color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; }
 .card .rtt { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.03em; }
 .card .rtt small { font-size: 0.7rem; color: var(--muted); font-weight: 500; }

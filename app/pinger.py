@@ -24,6 +24,7 @@ PERSIST_SKIP = {
     "packets_ok",
     "packets",
     "role",
+    "location",
     "fail_threshold",
     "recover_threshold",
     "degraded_ms",
@@ -37,6 +38,7 @@ class HostState:
     name: str
     ip: str
     role: str = "gateway"
+    location: str = ""
     fail_threshold: int = 3
     recover_threshold: int = 2
     degraded_ms: float = 200.0
@@ -178,7 +180,7 @@ class PingEngine:
         return sorted(
             self.states.values(),
             key=lambda s: (
-                0 if s.role == "gateway" else 1,
+                0 if s.role == "gateway" else 1 if s.role == "timeclock" else 2,
                 order.get(s.ip, 9999),
                 s.name,
             ),
@@ -187,6 +189,7 @@ class PingEngine:
     def _sync_host_meta(self, state: HostState, host: Any) -> None:
         state.name = host.name
         state.role = host.role
+        state.location = host.location
         state.fail_threshold = host.fail_threshold
         state.recover_threshold = host.recover_threshold
         state.degraded_ms = host.degraded_ms
