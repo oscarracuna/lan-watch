@@ -54,6 +54,71 @@ h1 { margin: 0; font-size: 1.55rem; letter-spacing: 0.02em; }
 .pill.ok { color: var(--up); border-color: rgba(34, 197, 94, 0.4); }
 .pill.bad { color: var(--down); border-color: rgba(239, 68, 68, 0.45); }
 
+.nav { display: flex; gap: 6px; }
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: var(--bg-elev);
+}
+.nav a[aria-current="page"] { color: var(--text); border-color: #3b4d72; }
+
+.map-page { padding-bottom: 16px; }
+.map-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 14px;
+  height: calc(100vh - 110px);
+  min-height: 480px;
+}
+.map-side {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  overflow: auto;
+}
+.map-side h2 { margin: 0 0 6px; font-size: 1rem; }
+.map-side h3 { margin: 14px 0 8px; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.city-map {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  min-height: 480px;
+  background: #0e1626;
+}
+.map-pin { background: transparent; border: 0; }
+.map-pin span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.35);
+}
+.map-row {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.map-row b { display: block; font-size: 0.92rem; }
+.map-row small { color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+.map-row .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--unknown); }
+.map-row .dot.up { background: var(--up); }
+.map-row .dot.down { background: var(--down); }
+.map-row .dot.degraded { background: var(--degraded); }
+.map-popup { display: flex; flex-direction: column; gap: 6px; min-width: 140px; }
+.map-popup .badge { font-size: 0.72rem; }
+.leaflet-container { font: inherit; background: #0e1626; }
+
+@media (max-width: 720px) {
+  .map-layout { grid-template-columns: 1fr; height: auto; }
+  .city-map { height: 70vh; }
+}
+
 .summary { display: flex; gap: 10px; flex-wrap: wrap; }
 .stat {
   background: var(--bg-elev);

@@ -95,6 +95,8 @@ With `telegram_commands: true`, the same bot answers `/status`, `/incidents`, an
 
 Alerts fire only on state edges (down / recovery), not on every missed ping. Down banners stay until dismissed; recoveries clear after about 15 seconds. Optional desktop notifications use the browser Notification API after you click **Enable notifications**.
 
+**Map** (`/map`) is a dark street map of Ciudad Juárez showing gateways only. Place a gateway from the side list, then drag the pin. Positions are stored in the data directory (`map-positions.json`) and shared by every browser on this LAN Watch. Terminals and endpoints stay on the dashboard.
+
 The dashboard tab title shows `2 DOWN · LAN Watch` when anything is down. Gateways sit above terminals, then endpoints. Cards sort down-first within each section and can be filtered by name, location, or IP. Each card has a heartbeat strip of recent sweeps (green / amber / red). The incident list keeps the last 24 hours of down/up events with duration.
 
 Each sweep sends `packets` pings (default 5). A sweep counts as up if at least one reply arrives; loss % and RTT spread are shown on the card. History lives in `data/lan-watch.db` locally, or `/var/lib/lan-watch/` on the systemd host, and is pruned to `history_hours`. Click a card for a sparkline and uptime over that window.
