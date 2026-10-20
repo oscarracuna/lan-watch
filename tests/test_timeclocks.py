@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 from app.config import load_config
-from app.notify import TelegramNotifier, find_hosts, format_host_message, format_status_message
 from app.pinger import Hub, PingEngine
 from app.store import Store
 
@@ -112,7 +111,7 @@ class TimeclockAlarmTests(unittest.TestCase):
             settings = load_config(_write_config(root))
             store = Store(root / "lan-watch.db")
             try:
-                engine = PingEngine(settings, store, Hub(), TelegramNotifier())
+                engine = PingEngine(settings, store, Hub())
                 clock = engine.states["10.1.0.8"]
                 camera = engine.states["10.0.0.2"]
                 self.assertEqual(clock.fail_threshold, 3)
@@ -147,68 +146,6 @@ class TimeclockAlarmTests(unittest.TestCase):
                 self.assertEqual(camera.status, "up")
             finally:
                 store.close()
-
-
-class TimeclockStatusTests(unittest.TestCase):
-    def test_status_message_has_terminals_section(self) -> None:
-        text = format_status_message(
-            {
-                "hosts": [
-                    {"name": "Core", "ip": "10.0.0.1", "role": "gateway", "status": "up"},
-                    {
-                        "name": "Front desk",
-                        "ip": "10.1.0.8",
-                        "role": "timeclock",
-                        "status": "down",
-                        "location": "Office",
-                    },
-                    {
-                        "name": "Shop floor",
-                        "ip": "10.2.0.8",
-                        "role": "timeclock",
-                        "status": "up",
-                        "location": "Warehouse",
-                    },
-                    {"name": "Camera", "ip": "10.0.0.2", "role": "endpoint", "status": "up"},
-                ],
-                "config": {"degraded_ms": 200, "degraded_loss_pct": 40},
-            }
-        )
-        self.assertLess(text.index("GATEWAYS"), text.index("TERMINALS"))
-        self.assertLess(text.index("TERMINALS"), text.index("ENDPOINTS"))
-        gateways, rest = text.split("TERMINALS", 1)
-        terminals, endpoints = rest.split("ENDPOINTS", 1)
-        self.assertIn("Core", gateways)
-        self.assertNotIn("Front desk", gateways)
-        self.assertIn("Front desk", terminals)
-        self.assertIn("Office", terminals)
-        self.assertIn("Shop floor", terminals)
-        self.assertIn("Warehouse", terminals)
-        self.assertIn("Camera", endpoints)
-        self.assertNotIn("Front desk", endpoints)
-
-    def test_host_lookup_includes_location(self) -> None:
-        hosts = [
-            {"name": "Front desk", "ip": "10.1.0.8", "role": "timeclock", "location": "Office"},
-            {"name": "Shop floor", "ip": "10.2.0.8", "role": "timeclock", "location": "Warehouse"},
-        ]
-        self.assertEqual([host["name"] for host in find_hosts(hosts, "Warehouse")], ["Shop floor"])
-        text = format_host_message(
-            {
-                "hosts": [
-                    {
-                        **hosts[0],
-                        "status": "up",
-                        "host_key": "10.1.0.8",
-                    }
-                ],
-                "config": {},
-                "incidents": [],
-            },
-            "Front desk",
-        )
-        self.assertIn("Office", text)
-        self.assertIn("TIMECLOCK", text)
 
 
 if __name__ == "__main__":

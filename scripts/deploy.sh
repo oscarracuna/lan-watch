@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install or update LAN Watch under /opt/lan-watch and run it as lanwatch.
-# Never replaces /etc/lan-watch/config.yaml, /var/lib/lan-watch, or telegram.env.
+# Never replaces /etc/lan-watch/config.yaml or /var/lib/lan-watch.
 #
 # Usage (from a git checkout of this repo):
 #   sudo ./scripts/deploy.sh
@@ -41,15 +41,10 @@ fi
 install -d -o "$APP_USER" -g "$APP_GROUP" -m 755 "$INSTALL_ROOT" "$DATA_DIR"
 install -d -o root -g "$APP_GROUP" -m 750 "$CONFIG_DIR"
 
-# Preserve live config/secrets before any code copy that might replace /opt files.
+# Preserve the live host list before any code copy that might replace /opt files.
 if [[ ! -f "$CONFIG_DIR/config.yaml" && -f "$INSTALL_ROOT/config.yaml" ]]; then
   cp -a "$INSTALL_ROOT/config.yaml" "$CONFIG_DIR/config.yaml"
   echo "Kept existing host list at $CONFIG_DIR/config.yaml"
-fi
-
-if [[ ! -f "$CONFIG_DIR/telegram.env" && -f "$INSTALL_ROOT/secrets/telegram.env" ]]; then
-  cp -a "$INSTALL_ROOT/secrets/telegram.env" "$CONFIG_DIR/telegram.env"
-  echo "Kept existing Telegram secrets at $CONFIG_DIR/telegram.env"
 fi
 
 copy_tree() {
@@ -59,17 +54,15 @@ copy_tree() {
       --exclude '.git/' \
       --exclude '.venv/' \
       --exclude 'data/' \
-      --exclude 'secrets/telegram.env' \
       --exclude '__pycache__/' \
       --exclude '*.pyc' \
       "$src/" "$dest/"
     return
   fi
-  mkdir -p "$dest/app" "$dest/scripts" "$dest/secrets"
+  mkdir -p "$dest/app" "$dest/scripts"
   cp -a "$src/app/." "$dest/app/"
   cp -a "$src/scripts/." "$dest/scripts/"
   cp -a "$src/requirements.txt" "$src/lan-watch.service" "$dest/"
-  cp -a "$src/secrets/telegram.env.example" "$dest/secrets/"
   if [[ -f "$src/README.md" ]]; then
     cp -a "$src/README.md" "$dest/"
   fi
@@ -83,19 +76,6 @@ if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
   cp -a "$REPO_ROOT/config.yaml" "$CONFIG_DIR/config.yaml"
   echo "Installed $CONFIG_DIR/config.yaml (edit hosts here; later deploys will not replace it)."
 fi
-
-ensure_key() {
-  local key="$1" line="$2"
-  if ! grep -qE "^${key}:" "$CONFIG_DIR/config.yaml"; then
-    printf '\n%s\n' "$line" >> "$CONFIG_DIR/config.yaml"
-    echo "Added $key to $CONFIG_DIR/config.yaml"
-  fi
-}
-
-ensure_key "telegram_enabled" "telegram_enabled: true"
-ensure_key "telegram_commands" "telegram_commands: true"
-ensure_key "alert_on_recovery" "alert_on_recovery: true"
-ensure_key "alert_cooldown_seconds" "alert_cooldown_seconds: 900"
 
 if [[ ! -f "$DATA_DIR/lan-watch.db" && -f "$INSTALL_ROOT/data/lan-watch.db" ]]; then
   if systemctl is-active --quiet lan-watch; then
@@ -111,28 +91,10 @@ if [[ ! -f "$DATA_DIR/lan-watch.db" && -f "$INSTALL_ROOT/data/lan-watch.db" ]]; 
   done
 fi
 
-if [[ ! -f "$CONFIG_DIR/telegram.env" ]]; then
-  for candidate in \
-    "$REPO_ROOT/secrets/telegram.env" \
-  do
-    if [[ -f "$candidate" ]]; then
-      cp -a "$candidate" "$CONFIG_DIR/telegram.env"
-      echo "Copied Telegram secrets from $candidate"
-      break
-    fi
-  done
-fi
-
-if [[ ! -f "$CONFIG_DIR/telegram.env" ]]; then
-  cp -a "$REPO_ROOT/secrets/telegram.env.example" "$CONFIG_DIR/telegram.env"
-  echo "Created empty $CONFIG_DIR/telegram.env — paste TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, then rerun this script."
-fi
-
 chown -R "$APP_USER:$APP_GROUP" "$INSTALL_ROOT" "$DATA_DIR"
 chown "root:$APP_GROUP" "$CONFIG_DIR"
-chown "$APP_USER:$APP_GROUP" "$CONFIG_DIR/config.yaml" "$CONFIG_DIR/telegram.env"
+chown "$APP_USER:$APP_GROUP" "$CONFIG_DIR/config.yaml"
 chmod 640 "$CONFIG_DIR/config.yaml"
-chmod 600 "$CONFIG_DIR/telegram.env"
 chmod 750 "$CONFIG_DIR"
 
 if [[ ! -x "$INSTALL_ROOT/.venv/bin/python" ]]; then
@@ -168,11 +130,4 @@ if [[ "$ok" -eq 1 ]]; then
 else
   echo "Service restarted but $HEALTH_URL did not respond yet. Check: journalctl -u lan-watch -n 50" >&2
   exit 1
-fi
-
-if grep -qE '^telegram_enabled:[[:space:]]*true' "$CONFIG_DIR/config.yaml"; then
-  if ! grep -qE '^TELEGRAM_BOT_TOKEN=.+' "$CONFIG_DIR/telegram.env" \
-    || ! grep -qE '^TELEGRAM_CHAT_ID=.+' "$CONFIG_DIR/telegram.env"; then
-    echo "Warning: telegram_enabled is true but $CONFIG_DIR/telegram.env is missing token or chat id." >&2
-  fi
 fi

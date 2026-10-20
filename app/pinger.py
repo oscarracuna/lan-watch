@@ -10,7 +10,6 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from app.config import Settings, config_mtime, load_config
-from app.notify import TelegramNotifier
 from app.store import Store
 
 RTT_RE = re.compile(r"time[=<]\s*([\d.]+)\s*ms", re.IGNORECASE)
@@ -147,12 +146,10 @@ class PingEngine:
         settings: Settings,
         store: Store,
         hub: Hub,
-        notifier: TelegramNotifier | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.hub = hub
-        self.notifier = notifier or TelegramNotifier()
         self.states: dict[str, HostState] = {}
         self.last_sweep_ts: float | None = None
         self._stop = asyncio.Event()
@@ -368,7 +365,6 @@ class PingEngine:
         if alert:
             self.hub.publish("alert", alert)
             self.hub.publish("incidents", self._incidents())
-            asyncio.create_task(self.notifier.notify(alert, self.settings))
 
     async def run(self) -> None:
         while not self._stop.is_set():

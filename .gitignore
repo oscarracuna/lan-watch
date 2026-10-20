@@ -7,6 +7,4 @@ data/
 *.db
 .DS_Store
 Thumbs.db
-secrets/telegram.env
 *.env
-!secrets/telegram.env.example

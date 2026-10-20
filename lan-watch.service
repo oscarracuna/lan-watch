@@ -10,8 +10,6 @@ Group=lanwatch
 WorkingDirectory=/opt/lan-watch
 Environment=LANWATCH_CONFIG=/etc/lan-watch/config.yaml
 Environment=LANWATCH_DATA=/var/lib/lan-watch
-Environment=LANWATCH_SECRETS=/etc/lan-watch/telegram.env
-EnvironmentFile=-/etc/lan-watch/telegram.env
 ExecStart=/opt/lan-watch/.venv/bin/python -m app
 Restart=always
 RestartSec=3

@@ -24,10 +24,6 @@ def data_dir() -> Path:
     return _env_path("LANWATCH_DATA") or (ROOT / "data")
 
 
-def secrets_file() -> Path:
-    return _env_path("LANWATCH_SECRETS") or (ROOT / "secrets" / "telegram.env")
-
-
 CONFIG_PATH = ROOT / "config.yaml"
 
 
@@ -61,10 +57,6 @@ class Settings:
     endpoint_degraded_loss_pct: float = 70.0
     packets: int = 5
     heartbeat_ticks: int = HEARTBEAT_TICKS
-    telegram_enabled: bool = False
-    telegram_commands: bool = False
-    alert_on_recovery: bool = True
-    alert_cooldown_seconds: float = 900.0
     hosts: list[Host] = field(default_factory=list)
 
     def public_dict(self) -> dict[str, Any]:
@@ -83,10 +75,6 @@ class Settings:
             "endpoint_degraded_loss_pct": self.endpoint_degraded_loss_pct,
             "packets": self.packets,
             "heartbeat_ticks": self.heartbeat_ticks,
-            "telegram_enabled": self.telegram_enabled,
-            "telegram_commands": self.telegram_commands,
-            "alert_on_recovery": self.alert_on_recovery,
-            "alert_cooldown_seconds": self.alert_cooldown_seconds,
         }
 
 
@@ -211,10 +199,6 @@ def load_config(path: Path | None = None) -> Settings:
         endpoint_degraded_loss_pct=endpoint_degraded_loss_pct,
         packets=max(1, min(20, _as_int(raw.get("packets"), 5))),
         heartbeat_ticks=max(8, min(120, _as_int(raw.get("heartbeat_ticks"), HEARTBEAT_TICKS))),
-        telegram_enabled=bool(raw.get("telegram_enabled", False)),
-        telegram_commands=bool(raw.get("telegram_commands", False)),
-        alert_on_recovery=bool(raw.get("alert_on_recovery", True)),
-        alert_cooldown_seconds=max(0.0, _as_float(raw.get("alert_cooldown_seconds"), 900.0)),
         hosts=hosts,
     )
 
