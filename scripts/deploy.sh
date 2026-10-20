@@ -113,7 +113,7 @@ fi
 
 if [[ ! -f "$CONFIG_DIR/telegram.env" ]]; then
   for candidate in \
-    "$REPO_ROOT/secrets/telegram.env" \
+    "$REPO_ROOT/secrets/telegram.env"
   do
     if [[ -f "$candidate" ]]; then
       cp -a "$candidate" "$CONFIG_DIR/telegram.env"
